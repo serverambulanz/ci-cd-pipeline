@@ -1,0 +1,112 @@
+# CI/CD Stack - Gitea + Woodpecker
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # Gitea - Self-hosted Git Service
+  # ============================================
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__server__ROOT_URL=http://localhost:3000
+      - GITEA__server__DOMAIN=localhost
+      - GITEA__server__HTTP_PORT=3000
+    networks:
+      - devops-network
+      - ci-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Woodpecker CI - Server
+  # ============================================
+  woodpecker-server:
+    image: woodpeckerci/woodpecker-server:latest
+    container_name: woodpecker-server
+    restart: unless-stopped
+    depends_on:
+      gitea:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    volumes:
+      - woodpecker_data:/var/lib/woodpecker
+    environment:
+      # Server Settings
+      - WOODPECKER_OPEN=true
+      - WOODPECKER_HOST=http://localhost:8000
+      - WOODPECKER_ADMIN=admin
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
+      
+      # Gitea Integration
+      - WOODPECKER_GITEA=true
+      - WOODPECKER_GITEA_URL=http://gitea:3000
+      - WOODPECKER_GITEA_CLIENT=${GITEA_OAUTH_CLIENT_ID}
+      - WOODPECKER_GITEA_SECRET=${GITEA_OAUTH_CLIENT_SECRET}
+      
+      - WOODPECKER_LOG_LEVEL=info
+    networks:
+      - devops-network
+      - ci-internal
+
+  # ============================================
+  # Woodpecker CI - Agent
+  # ============================================
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:latest
+    container_name: woodpecker-agent
+    restart: unless-stopped
+    depends_on:
+      - woodpecker-server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - cargo_cache:/root/.cargo
+      - rustup_cache:/root/.rustup
+    environment:
+      - WOODPECKER_SERVER=woodpecker-server:9000
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
+      - WOODPECKER_MAX_WORKFLOWS=4
+      - WOODPECKER_LOG_LEVEL=info
+      - CARGO_HOME=/root/.cargo
+      - RUSTUP_HOME=/root/.rustup
+      
+      # Backend für nested Docker
+      - WOODPECKER_BACKEND=docker
+      - WOODPECKER_BACKEND_DOCKER_NETWORK=devops-network
+    networks:
+      - devops-network
+      - ci-internal
+
+volumes:
+  gitea_data:
+    
+  
+  woodpecker_data:
+    
+  
+  cargo_cache:
+    
+  
+  rustup_cache:
+    
+
+networks:
+  devops-network:
+    external: true
+  ci-internal:
+    driver: bridge

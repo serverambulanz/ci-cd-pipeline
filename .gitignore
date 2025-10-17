@@ -1,0 +1,23 @@
+# Environment Variables
+**/.env
+**/.env.*
+!**/.env.example
+
+# Secrets
+*.key
+*.pem
+*.crt
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Backups
+*.backup
+*.bak

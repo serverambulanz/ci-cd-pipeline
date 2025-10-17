@@ -1,0 +1,93 @@
+# DefectDojo Stack
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # DefectDojo Database
+  # ============================================
+  defectdojo-postgres:
+    image: postgres:16-alpine
+    container_name: defectdojo-postgres
+    restart: unless-stopped
+    volumes:
+      - dojo_postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=defectdojo
+      - POSTGRES_USER=defectdojo
+      - POSTGRES_PASSWORD=${DEFECTDOJO_DB_PASSWORD}
+    networks:
+      - dojo-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defectdojo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # DefectDojo Redis
+  # ============================================
+  defectdojo-redis:
+    image: redis:alpine
+    container_name: defectdojo-redis
+    restart: unless-stopped
+    networks:
+      - dojo-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # DefectDojo Application
+  # ============================================
+  defectdojo:
+    image: defectdojo/defectdojo-django:latest
+    container_name: defectdojo
+    restart: unless-stopped
+    depends_on:
+      defectdojo-postgres:
+        condition: service_healthy
+      defectdojo-redis:
+        condition: service_healthy
+    volumes:
+      - dojo_media:/app/media
+    environment:
+      - DD_DATABASE_URL=postgresql://defectdojo:${DEFECTDOJO_DB_PASSWORD}@defectdojo-postgres:5432/defectdojo
+      - DD_SECRET_KEY=${DEFECTDOJO_SECRET_KEY}
+      - DD_ALLOWED_HOSTS=*
+      - DD_ADMIN_USER=admin
+      - DD_ADMIN_PASSWORD=${DEFECTDOJO_ADMIN_PASSWORD}
+      - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - DD_CELERY_RESULT_BACKEND=redis://defectdojo-redis:6379/0
+    networks:
+      - devops-network
+      - dojo-internal
+
+  # ============================================
+  # DefectDojo Nginx
+  # ============================================
+  defectdojo-nginx:
+    image: defectdojo/defectdojo-nginx:latest
+    container_name: defectdojo-nginx
+    restart: unless-stopped
+    depends_on:
+      - defectdojo
+    ports:
+      - "8082:8080"
+    networks:
+      - devops-network
+      - dojo-internal
+
+volumes:
+  dojo_postgres:
+    
+  
+  dojo_media:
+    
+
+networks:
+  devops-network:
+    external: true
+  dojo-internal:
+    driver: bridge

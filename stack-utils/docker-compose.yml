@@ -1,0 +1,47 @@
+# Utilities Stack - Trivy Server, Dozzle, SOPS
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # Trivy Server (CLI Scans)
+  # ============================================
+  trivy-server:
+    image: aquasec/trivy:latest
+    container_name: trivy-server
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - trivy_cache:/root/.cache
+    command: ["server", "--listen", "0.0.0.0:8080"]
+    environment:
+      - TRIVY_GITHUB_TOKEN=${TRIVY_GITHUB_TOKEN}
+      - TRIVY_LISTEN=0.0.0.0:8080
+    networks:
+      - devops-network
+
+  # ============================================
+  # Dozzle - Log Viewer
+  # ============================================
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOZZLE_LEVEL=info
+      - DOZZLE_TAILSIZE=300
+      - DOZZLE_FILTER=name=gitea,name=woodpecker,name=harbor,name=defectdojo,name=trivy
+    networks:
+      - devops-network
+
+volumes:
+  trivy_cache:
+    
+
+networks:
+  devops-network:
+    external: true

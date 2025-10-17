@@ -1,0 +1,221 @@
+# Harbor Registry Stack
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # Harbor Database
+  # ============================================
+  harbor-db:
+    image: goharbor/harbor-db:v2.11.0
+    container_name: harbor-db
+    restart: unless-stopped
+    volumes:
+      - harbor_db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=${HARBOR_DB_PASSWORD}
+      - POSTGRES_DB=registry
+      - POSTGRES_USER=postgres
+    networks:
+      - registry-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Harbor Redis
+  # ============================================
+  harbor-redis:
+    image: goharbor/redis-photon:v2.11.0
+    container_name: harbor-redis
+    restart: unless-stopped
+    volumes:
+      - harbor_redis:/var/lib/redis
+    networks:
+      - registry-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # Harbor Registry
+  # ============================================
+  harbor-registry:
+    image: goharbor/registry-photon:v2.11.0
+    container_name: harbor-registry
+    restart: unless-stopped
+    volumes:
+      - harbor_registry:/storage
+      - harbor_registry_config:/etc/registry
+    environment:
+      - REGISTRY_HTTP_SECRET=${HARBOR_REGISTRY_SECRET}
+    networks:
+      - registry-internal
+
+  # ============================================
+  # Harbor Registry Controller
+  # ============================================
+  harbor-registryctl:
+    image: goharbor/harbor-registryctl:v2.11.0
+    container_name: harbor-registryctl
+    restart: unless-stopped
+    depends_on:
+      - harbor-registry
+    volumes:
+      - harbor_registry:/storage
+      - harbor_registry_config:/etc/registry
+      - harbor_registryctl_config:/etc/registryctl
+    environment:
+      - CORE_SECRET=${HARBOR_CORE_SECRET}
+      - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
+    networks:
+      - registry-internal
+
+  # ============================================
+  # Harbor Core
+  # ============================================
+  harbor-core:
+    image: goharbor/harbor-core:v2.11.0
+    container_name: harbor-core
+    restart: unless-stopped
+    depends_on:
+      harbor-db:
+        condition: service_healthy
+      harbor-redis:
+        condition: service_healthy
+    volumes:
+      - harbor_config:/etc/core
+      - harbor_secret:/secret
+      - harbor_ca:/etc/core/ca
+    environment:
+      - CORE_SECRET=${HARBOR_CORE_SECRET}
+      - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
+      - EXT_ENDPOINT=http://localhost:5000
+      - DATABASE_TYPE=postgresql
+      - POSTGRESQL_HOST=harbor-db
+      - POSTGRESQL_PORT=5432
+      - POSTGRESQL_USERNAME=postgres
+      - POSTGRESQL_PASSWORD=${HARBOR_DB_PASSWORD}
+      - POSTGRESQL_DATABASE=registry
+      - POSTGRESQL_SSLMODE=disable
+      - REDIS_URL=redis://harbor-redis:6379/1
+      - REGISTRY_CREDENTIAL_USERNAME=harbor_registry_user
+      - REGISTRY_CREDENTIAL_PASSWORD=${HARBOR_REGISTRY_PASSWORD}
+    networks:
+      - devops-network
+      - registry-internal
+
+  # ============================================
+  # Harbor Job Service
+  # ============================================
+  harbor-jobservice:
+    image: goharbor/harbor-jobservice:v2.11.0
+    container_name: harbor-jobservice
+    restart: unless-stopped
+    depends_on:
+      - harbor-core
+      - harbor-registry
+    volumes:
+      - harbor_job_logs:/var/log/jobs
+    environment:
+      - CORE_SECRET=${HARBOR_CORE_SECRET}
+      - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
+      - CORE_URL=http://harbor-core:8080
+      - REGISTRY_URL=http://harbor-registry:5000
+      - REGISTRY_CREDENTIAL_USERNAME=harbor_registry_user
+      - REGISTRY_CREDENTIAL_PASSWORD=${HARBOR_REGISTRY_PASSWORD}
+    networks:
+      - registry-internal
+
+  # ============================================
+  # Harbor Portal (UI)
+  # ============================================
+  harbor-portal:
+    image: goharbor/harbor-portal:v2.11.0
+    container_name: harbor-portal
+    restart: unless-stopped
+    networks:
+      - registry-internal
+
+  # ============================================
+  # Trivy Scanner (Scan-on-Push)
+  # ============================================
+  harbor-trivy:
+    image: goharbor/trivy-adapter-photon:v2.11.0
+    container_name: harbor-trivy
+    restart: unless-stopped
+    depends_on:
+      - harbor-redis
+    volumes:
+      - harbor_trivy_cache:/home/scanner/.cache/trivy
+    environment:
+      - SCANNER_STORE_REDIS_URL=redis://harbor-redis:6379/4
+      - SCANNER_TRIVY_SKIP_UPDATE=false
+      - SCANNER_TRIVY_GITHUB_TOKEN=${TRIVY_GITHUB_TOKEN}
+      - SCANNER_TRIVY_SEVERITY=UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+      - SCANNER_TRIVY_VULN_TYPE=os,library
+      - SCANNER_LOG_LEVEL=info
+    networks:
+      - registry-internal
+
+  # ============================================
+  # Harbor Nginx (Reverse Proxy)
+  # ============================================
+  harbor-nginx:
+    image: goharbor/nginx-photon:v2.11.0
+    container_name: harbor-nginx
+    restart: unless-stopped
+    depends_on:
+      - harbor-core
+      - harbor-portal
+      - harbor-registry
+    volumes:
+      - harbor_nginx_config:/etc/nginx:z
+    ports:
+      - "5000:8080"
+    networks:
+      - devops-network
+      - registry-internal
+
+volumes:
+  harbor_db:
+    
+  
+  harbor_redis:
+    
+  
+  harbor_registry:
+    
+  
+  harbor_registry_config:
+    
+  
+  harbor_registryctl_config:
+    
+  
+  harbor_config:
+    
+  
+  harbor_secret:
+    
+  
+  harbor_ca:
+    
+  
+  harbor_job_logs:
+    
+  
+  harbor_trivy_cache:
+    
+  
+  harbor_nginx_config:
+    
+
+networks:
+  devops-network:
+    external: true
+  registry-internal:
+    driver: bridge
