@@ -42,14 +42,14 @@ services:
       gitea:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "7050:8000"
       - "9000:9000"
     volumes:
       - woodpecker_data:/var/lib/woodpecker
     environment:
       # Server Settings
       - WOODPECKER_OPEN=true
-      - WOODPECKER_HOST=http://localhost:8000
+      - WOODPECKER_HOST=http://localhost:7050
       - WOODPECKER_ADMIN=admin
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
       

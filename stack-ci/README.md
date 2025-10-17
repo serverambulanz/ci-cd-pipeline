@@ -25,7 +25,7 @@ open http://localhost:3000
 ## URLs
 
 - Gitea: http://localhost:3000
-- Woodpecker: http://localhost:8000
+- Woodpecker: http://localhost:7050
 
 ## Netzwerk
 
