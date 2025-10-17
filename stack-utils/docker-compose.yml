@@ -9,8 +9,7 @@ services:
     image: aquasec/trivy:latest
     container_name: trivy-server
     restart: unless-stopped
-    ports:
-      - "8081:8080"
+    # Port 8080 wird NICHT mehr exponiert → nur über Traefik!
     volumes:
       - trivy_cache:/root/.cache
     command: ["server", "--listen", "0.0.0.0:8080"]
@@ -19,6 +18,19 @@ services:
       - TRIVY_LISTEN=0.0.0.0:8080
     networks:
       - devops-network
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router für Trivy API
+      - "traefik.http.routers.trivy.rule=Host(`trivy.devops.local`)"
+      - "traefik.http.routers.trivy.entrypoints=web"
+      - "traefik.http.services.trivy.loadbalancer.server.port=8080"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
 
   # ============================================
   # Dozzle - Log Viewer
@@ -27,16 +39,29 @@ services:
     image: amir20/dozzle:latest
     container_name: dozzle
     restart: unless-stopped
-    ports:
-      - "8888:8080"
+    # Port 8080 wird NICHT mehr exponiert → nur über Traefik!
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker Socket für Colima/macOS
+      - /Volumes/DockerData/colima/default/docker.sock:/var/run/docker.sock:ro
     environment:
       - DOZZLE_LEVEL=info
       - DOZZLE_TAILSIZE=300
       - DOZZLE_FILTER=name=gitea,name=woodpecker,name=harbor,name=defectdojo,name=trivy
     networks:
       - devops-network
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router für Dozzle UI
+      - "traefik.http.routers.dozzle.rule=Host(`logs.devops.local`)"
+      - "traefik.http.routers.dozzle.entrypoints=web"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
 
 volumes:
   trivy_cache:

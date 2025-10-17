@@ -24,8 +24,10 @@ curl http://localhost:8081/healthz  # Trivy Health
 
 ## URLs
 
-- Trivy Server: http://localhost:8081
-- Dozzle Logs: http://localhost:8888
+⚠️ **Requires Traefik Proxy Stack** (stack-proxy)
+
+- Trivy Server: http://trivy.devops.local (via Traefik)
+- Dozzle Logs: http://logs.devops.local (via Traefik)
 
 ## Netzwerk
 
@@ -44,8 +46,8 @@ Siehe `.env.example`:
 ## Trivy CLI Usage
 
 ```bash
-# Scan über Server
-export TRIVY_SERVER=http://localhost:8081
+# Scan über Server (via Traefik)
+export TRIVY_SERVER=http://trivy.devops.local
 trivy image alpine:latest
 
 # Filesystem Scan

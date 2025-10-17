@@ -24,8 +24,11 @@ open http://localhost:3000
 
 ## URLs
 
-- Gitea: http://localhost:3000
-- Woodpecker: http://localhost:7050
+⚠️ **Requires Traefik Proxy Stack** (stack-proxy)
+
+- Gitea: http://git.devops.local (via Traefik)
+- Gitea SSH: ssh://git@localhost:2222 (direct)
+- Woodpecker: http://ci.devops.local (via Traefik)
 
 ## Netzwerk
 

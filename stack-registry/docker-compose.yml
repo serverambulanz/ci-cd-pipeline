@@ -93,7 +93,7 @@ services:
     environment:
       - CORE_SECRET=${HARBOR_CORE_SECRET}
       - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
-      - EXT_ENDPOINT=http://localhost:5000
+      - EXT_ENDPOINT=http://registry.devops.local
       - DATABASE_TYPE=postgresql
       - POSTGRESQL_HOST=harbor-db
       - POSTGRESQL_PORT=5432
@@ -174,11 +174,23 @@ services:
       - harbor-registry
     volumes:
       - harbor_nginx_config:/etc/nginx:z
-    ports:
-      - "5000:8080"
+    # Port 8080 wird NICHT mehr exponiert → nur über Traefik!
     networks:
       - devops-network
       - registry-internal
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router für Harbor UI & Registry
+      - "traefik.http.routers.harbor.rule=Host(`registry.devops.local`)"
+      - "traefik.http.routers.harbor.entrypoints=web"
+      - "traefik.http.services.harbor.loadbalancer.server.port=8080"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
 
 volumes:
   harbor_db:

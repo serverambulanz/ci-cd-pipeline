@@ -10,8 +10,9 @@ services:
     container_name: gitea
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # SSH bleibt exponiert (kein HTTP, kann nicht über Traefik)
       - "2222:22"
+      # HTTP Port 3000 wird NICHT mehr exponiert → nur über Traefik!
     volumes:
       - gitea_data:/data
       - /etc/timezone:/etc/timezone:ro
@@ -19,12 +20,26 @@ services:
     environment:
       - USER_UID=1000
       - USER_GID=1000
-      - GITEA__server__ROOT_URL=http://localhost:3000
-      - GITEA__server__DOMAIN=localhost
+      # ROOT_URL angepasst für Traefik Domain
+      - GITEA__server__ROOT_URL=http://git.devops.local
+      - GITEA__server__DOMAIN=git.devops.local
       - GITEA__server__HTTP_PORT=3000
     networks:
       - devops-network
       - ci-internal
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router
+      - "traefik.http.routers.gitea.rule=Host(`git.devops.local`)"
+      - "traefik.http.routers.gitea.entrypoints=web"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
       interval: 30s
@@ -42,27 +57,42 @@ services:
       gitea:
         condition: service_healthy
     ports:
-      - "7050:8000"
+      # gRPC Port für Agent Kommunikation (MUSS exponiert bleiben, interner Protokoll)
       - "9000:9000"
+      # HTTP Port 8000 wird NICHT mehr exponiert → nur über Traefik!
     volumes:
       - woodpecker_data:/var/lib/woodpecker
     environment:
       # Server Settings
       - WOODPECKER_OPEN=true
-      - WOODPECKER_HOST=http://localhost:7050
+      # HOST URL angepasst für Traefik Domain
+      - WOODPECKER_HOST=http://ci.devops.local
       - WOODPECKER_ADMIN=admin
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
-      
-      # Gitea Integration
+
+      # Gitea Integration (interne URL bleibt gleich)
       - WOODPECKER_GITEA=true
       - WOODPECKER_GITEA_URL=http://gitea:3000
       - WOODPECKER_GITEA_CLIENT=${GITEA_OAUTH_CLIENT_ID}
       - WOODPECKER_GITEA_SECRET=${GITEA_OAUTH_CLIENT_SECRET}
-      
+
       - WOODPECKER_LOG_LEVEL=info
     networks:
       - devops-network
       - ci-internal
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router für Web UI
+      - "traefik.http.routers.woodpecker.rule=Host(`ci.devops.local`)"
+      - "traefik.http.routers.woodpecker.entrypoints=web"
+      - "traefik.http.services.woodpecker.loadbalancer.server.port=8000"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
 
   # ============================================
   # Woodpecker CI - Agent

@@ -29,7 +29,9 @@ open http://localhost:5000
 
 ## URL
 
-- Harbor: http://localhost:5000
+⚠️ **Requires Traefik Proxy Stack** (stack-proxy)
+
+- Harbor: http://registry.devops.local (via Traefik)
 
 ## Netzwerk
 

@@ -1,0 +1,80 @@
+# Traefik Reverse Proxy Stack
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # Traefik - Reverse Proxy & Load Balancer
+  # ============================================
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"        # HTTP Entry Point
+      - "443:443"      # HTTPS Entry Point (future TLS)
+      - "8080:8080"    # Traefik Dashboard
+    volumes:
+      # Docker Socket für Service Discovery (macOS/Colima)
+      - /Volumes/DockerData/colima/default/docker.sock:/var/run/docker.sock:ro
+      - traefik_config:/etc/traefik
+      - traefik_certs:/certs
+    command:
+      # ==================
+      # API & Dashboard
+      # ==================
+      - "--api.dashboard=true"
+      - "--api.insecure=true"  # Dashboard ohne Auth (nur lokal, Port 8080)
+
+      # ==================
+      # Docker Provider
+      # ==================
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"  # Nur Services mit traefik.enable=true
+      - "--providers.docker.network=devops-network"   # Standard Netzwerk für Routing
+
+      # ==================
+      # Entry Points
+      # ==================
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # ==================
+      # Logging
+      # ==================
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+
+      # ==================
+      # Metrics (Prometheus)
+      # ==================
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.addEntryPointsLabels=true"
+      - "--metrics.prometheus.addServicesLabels=true"
+
+      # ==================
+      # Health Check
+      # ==================
+      - "--ping=true"
+    networks:
+      - devops-network
+    labels:
+      # Traefik Dashboard Routing
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.devops.local`)"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=web"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  traefik_config:
+  traefik_certs:
+
+networks:
+  devops-network:
+    external: true
