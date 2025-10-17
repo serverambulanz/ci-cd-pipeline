@@ -1,0 +1,65 @@
+# Dashboard Stack - Homarr
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # Homarr - Modern Dashboard & Homepage
+  # ============================================
+  homarr:
+    image: ghcr.io/ajnart/homarr:latest
+    container_name: homarr
+    restart: unless-stopped
+    volumes:
+      # Config & Data (persistent)
+      - homarr_configs:/app/data/configs
+      - homarr_data:/data
+      - homarr_icons:/app/public/icons
+
+      # Docker Socket für Container Integration
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Base URL für Reverse Proxy
+      - BASE_URL=dashboard.devops.local
+
+      # Timezone
+      - TZ=Europe/Berlin
+
+      # Auth (optional, für Multi-User)
+      - AUTH_PROVIDER=credentials
+
+      # Default Admin User (NACH ERSTEM LOGIN ÄNDERN!)
+      - DEFAULT_ADMIN_USERNAME=admin
+      - DEFAULT_ADMIN_PASSWORD=${HOMARR_ADMIN_PASSWORD:-admin}
+
+    networks:
+      - devops-network
+
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router
+      - "traefik.http.routers.homarr.rule=Host(`dashboard.devops.local`)"
+      - "traefik.http.routers.homarr.entrypoints=web"
+      - "traefik.http.services.homarr.loadbalancer.server.port=7575"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7575/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  homarr_configs:
+  homarr_data:
+  homarr_icons:
+
+networks:
+  devops-network:
+    external: true
