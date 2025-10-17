@@ -14,8 +14,9 @@ services:
       - "443:443"      # HTTPS Entry Point (future TLS)
       - "8080:8080"    # Traefik Dashboard
     volumes:
-      # Docker Socket für Service Discovery (macOS/Colima)
-      - /Volumes/DockerData/colima/default/docker.sock:/var/run/docker.sock:ro
+      # Docker Socket für Service Discovery
+      # Nutzt /var/run/docker.sock (symlink zu Colima Socket)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_config:/etc/traefik
       - traefik_certs:/certs
     command:
