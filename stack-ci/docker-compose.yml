@@ -62,6 +62,9 @@ services:
       # HTTP Port 8000 wird NICHT mehr exponiert → nur über Traefik!
     volumes:
       - woodpecker_data:/var/lib/woodpecker
+    extra_hosts:
+      # Ermöglicht Container-interne Auflösung von git.devops.local über Traefik
+      - "git.devops.local:172.20.0.6"
     environment:
       # Server Settings
       - WOODPECKER_OPEN=true
@@ -70,7 +73,7 @@ services:
       - WOODPECKER_ADMIN=admin
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
 
-      # Gitea Integration (muss öffentliche URL verwenden für OAuth!)
+      # Gitea Integration (via Traefik für OAuth-Kompatibilität)
       - WOODPECKER_GITEA=true
       - WOODPECKER_GITEA_URL=http://git.devops.local
       - WOODPECKER_GITEA_CLIENT=${GITEA_OAUTH_CLIENT_ID}
