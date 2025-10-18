@@ -1,0 +1,135 @@
+# OpenTofu Stack - Infrastructure as Code
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # OpenTofu CLI Container
+  # ============================================
+  opentofu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: opentofu-cli:1.10.6
+    container_name: opentofu
+    restart: "no"  # Manual execution only
+    working_dir: /workspace
+    volumes:
+      # Workspace for Terraform/OpenTofu files
+      - opentofu_workspace:/workspace
+
+      # AWS Credentials (if needed)
+      - ~/.aws:/root/.aws:ro
+
+      # SSH Keys (for Git)
+      - ~/.ssh:/root/.ssh:ro
+
+      # Terraform/OpenTofu state cache
+      - opentofu_cache:/root/.terraform.d
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
+      - "taiga.devops.local:host-gateway"
+    environment:
+      # Terraform Cloud / OpenTofu Registry
+      - TF_CLI_CONFIG_FILE=/root/.terraform.d/credentials.tfrc.json
+
+      # AWS Credentials (from environment or .aws)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-central-1}
+
+      # Scaleway Credentials (optional)
+      - SCW_ACCESS_KEY=${SCW_ACCESS_KEY:-}
+      - SCW_SECRET_KEY=${SCW_SECRET_KEY:-}
+      - SCW_DEFAULT_PROJECT_ID=${SCW_DEFAULT_PROJECT_ID:-}
+      - SCW_DEFAULT_REGION=${SCW_DEFAULT_REGION:-fr-par}
+
+      # Terraform Cloud Token (optional)
+      - TFC_TOKEN=${TFC_TOKEN:-}
+
+      # Git Configuration
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-DevOps Bot}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-devops@local}
+      - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-DevOps Bot}
+      - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-devops@local}
+    networks:
+      - devops-network
+    command: ["sleep", "infinity"]  # Keep container running for manual execution
+
+  # ============================================
+  # OpenTofu Web UI (Atlantis - optional)
+  # ============================================
+  atlantis:
+    image: ghcr.io/runatlantis/atlantis:v0.31.0
+    container_name: atlantis
+    restart: unless-stopped
+    volumes:
+      - atlantis_data:/atlantis-data
+    extra_hosts:
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
+      - "taiga.devops.local:host-gateway"
+    environment:
+      # Atlantis Configuration
+      - ATLANTIS_REPO_ALLOWLIST=git.devops.local/*
+      - ATLANTIS_ATLANTIS_URL=http://atlantis.devops.local
+      - ATLANTIS_PORT=4141
+
+      # Gitea Integration
+      - ATLANTIS_GITEA_USER=${ATLANTIS_GITEA_USER:-atlantis}
+      - ATLANTIS_GITEA_TOKEN=${ATLANTIS_GITEA_TOKEN}
+      - ATLANTIS_GITEA_WEBHOOK_SECRET=${ATLANTIS_WEBHOOK_SECRET}
+      - ATLANTIS_GITEA_BASE_URL=http://git.devops.local
+
+      # Data Directory
+      - ATLANTIS_DATA_DIR=/atlantis-data
+
+      # Terraform/OpenTofu Binary
+      - ATLANTIS_DEFAULT_TF_VERSION=opentofu-1.10.6
+
+      # AWS Credentials
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-central-1}
+    networks:
+      - devops-network
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router für Atlantis UI
+      - "traefik.http.routers.atlantis.rule=Host(`atlantis.devops.local`)"
+      - "traefik.http.routers.atlantis.entrypoints=web"
+      - "traefik.http.services.atlantis.loadbalancer.server.port=4141"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
+    command:
+      - server
+      - --gh-user=${ATLANTIS_GITEA_USER}
+      - --gh-token=${ATLANTIS_GITEA_TOKEN}
+      - --gh-webhook-secret=${ATLANTIS_WEBHOOK_SECRET}
+      - --repo-allowlist=git.devops.local/*
+      - --gitea-base-url=http://git.devops.local
+
+volumes:
+  opentofu_workspace:
+  opentofu_cache:
+  atlantis_data:
+
+networks:
+  devops-network:
+    external: true
