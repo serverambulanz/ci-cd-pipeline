@@ -6,7 +6,7 @@ services:
   # Homarr - Modern Dashboard & Homepage
   # ============================================
   homarr:
-    image: ghcr.io/ajnart/homarr:latest
+    image: ghcr.io/homarr-labs/homarr:1.42.0
     container_name: homarr
     restart: unless-stopped
     volumes:
