@@ -70,9 +70,9 @@ services:
       - WOODPECKER_ADMIN=admin
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
 
-      # Gitea Integration (interne URL bleibt gleich)
+      # Gitea Integration (muss öffentliche URL verwenden für OAuth!)
       - WOODPECKER_GITEA=true
-      - WOODPECKER_GITEA_URL=http://gitea:3000
+      - WOODPECKER_GITEA_URL=http://git.devops.local
       - WOODPECKER_GITEA_CLIENT=${GITEA_OAUTH_CLIENT_ID}
       - WOODPECKER_GITEA_SECRET=${GITEA_OAUTH_CLIENT_SECRET}
 
