@@ -17,6 +17,15 @@ services:
 
       # Docker Socket für Container Integration
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
     environment:
       # Base URL für Reverse Proxy
       - BASE_URL=dashboard.devops.local

@@ -13,6 +13,15 @@ services:
     volumes:
       - trivy_cache:/root/.cache
     command: ["server", "--listen", "0.0.0.0:8080"]
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
     environment:
       - TRIVY_GITHUB_TOKEN=${TRIVY_GITHUB_TOKEN}
       - TRIVY_LISTEN=0.0.0.0:8080
@@ -43,6 +52,15 @@ services:
     volumes:
       # Docker Socket für Colima/macOS
       - /Volumes/DockerData/colima/default/docker.sock:/var/run/docker.sock:ro
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
     environment:
       - DOZZLE_LEVEL=info
       - DOZZLE_TAILSIZE=300

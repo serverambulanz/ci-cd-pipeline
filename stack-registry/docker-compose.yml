@@ -90,6 +90,15 @@ services:
       - harbor_config:/etc/core
       - harbor_secret:/secret
       - harbor_ca:/etc/core/ca
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
     environment:
       - CORE_SECRET=${HARBOR_CORE_SECRET}
       - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
@@ -174,6 +183,15 @@ services:
       - harbor-registry
     volumes:
       - harbor_nginx_config:/etc/nginx:z
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
     # Port 8080 wird NICHT mehr exponiert → nur über Traefik!
     networks:
       - devops-network

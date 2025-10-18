@@ -52,6 +52,15 @@ services:
         condition: service_healthy
     volumes:
       - dojo_media:/app/media
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
     environment:
       - DD_DATABASE_URL=postgresql://defectdojo:${DEFECTDOJO_DB_PASSWORD}@defectdojo-postgres:5432/defectdojo
       - DD_SECRET_KEY=${DEFECTDOJO_SECRET_KEY}
