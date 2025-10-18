@@ -4,12 +4,16 @@ Modulare Docker-Compose Stacks mit separater Git-Versionierung.
 
 ## Stack Übersicht
 
-| Stack | Services | Ports | Repository |
-|-------|----------|-------|------------|
-| **CI** | Gitea, Woodpecker | 3000, 2222, 8000, 9000 | `stack-ci/` |
-| **Registry** | Harbor, PostgreSQL, Redis, Trivy | 5000 | `stack-registry/` |
-| **DefectDojo** | DefectDojo, PostgreSQL, Redis | 8082 | `stack-dojo/` |
-| **Utils** | Trivy Server, Dozzle | 8081, 8888 | `stack-utils/` |
+| Stack | Services | Domain | Repository |
+|-------|----------|--------|------------|
+| **Proxy** | Traefik | traefik.devops.local | `stack-proxy/` |
+| **CI/CD** | Gitea, Woodpecker | git.devops.local, ci.devops.local | `stack-ci/` |
+| **Registry** | Harbor, PostgreSQL, Redis, Trivy | registry.devops.local | `stack-registry/` |
+| **Security** | DefectDojo, PostgreSQL, Redis | dojo.devops.local | `stack-dojo/` |
+| **Utils** | Trivy Server, Dozzle | trivy.devops.local, logs.devops.local | `stack-utils/` |
+| **Dashboard** | Homarr | dashboard.devops.local | `stack-dashboard/` |
+| **Project Mgmt** | Taiga, PostgreSQL, RabbitMQ | taiga.devops.local | `stack-taiga/` |
+| **IaC** | OpenTofu, Atlantis | atlantis.devops.local | `stack-opentofu/` |
 
 ## Deployment
 
@@ -108,15 +112,25 @@ nano .env
 
 ## Service URLs
 
-Nach Deployment erreichbar:
+Nach Deployment erreichbar (via Traefik):
 
-- Portainer: https://localhost:9443
-- Gitea: http://localhost:3000
-- Woodpecker: http://localhost:8000
-- Harbor: http://localhost:5000
-- DefectDojo: http://localhost:8082
-- Trivy: http://localhost:8081
-- Dozzle: http://localhost:8888
+- **Traefik Dashboard**: http://traefik.devops.local
+- **Gitea**: http://git.devops.local
+- **Woodpecker CI**: http://ci.devops.local
+- **Harbor Registry**: http://registry.devops.local
+- **DefectDojo**: http://dojo.devops.local
+- **Trivy Server**: http://trivy.devops.local
+- **Dozzle Logs**: http://logs.devops.local
+- **Homarr Dashboard**: http://dashboard.devops.local
+- **Taiga**: http://taiga.devops.local
+- **Atlantis**: http://atlantis.devops.local
+
+**DNS-Setup erforderlich** (in `/etc/hosts`):
+```bash
+127.0.0.1 traefik.devops.local git.devops.local ci.devops.local
+127.0.0.1 registry.devops.local logs.devops.local trivy.devops.local
+127.0.0.1 dashboard.devops.local taiga.devops.local atlantis.devops.local
+```
 
 ## Vorteile dieser Struktur
 
