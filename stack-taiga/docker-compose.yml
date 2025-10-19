@@ -195,8 +195,10 @@ services:
     image: nginx:1.19-alpine
     container_name: taiga-gateway
     restart: unless-stopped
+    configs:
+      - source: taiga-nginx-config
+        target: /etc/nginx/conf.d/default.conf
     volumes:
-      - ./taiga.conf:/etc/nginx/conf.d/default.conf
       - taiga-static-data:/taiga/static
       - taiga-media-data:/taiga/media
     networks:
@@ -229,6 +231,10 @@ volumes:
   taiga-db-data:
   taiga-async-rabbitmq-data:
   taiga-events-rabbitmq-data:
+
+configs:
+  taiga-nginx-config:
+    file: ./taiga.conf
 
 networks:
   devops-network:
