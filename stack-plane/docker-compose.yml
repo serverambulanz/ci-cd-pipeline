@@ -89,6 +89,9 @@ services:
       # Redis
       REDIS_URL: "redis://plane-redis:6379/"
 
+      # Celery
+      CELERY_BROKER_URL: "redis://plane-redis:6379/0"
+
       # MinIO/S3
       USE_MINIO: "1"
       AWS_ACCESS_KEY_ID: "${MINIO_ROOT_USER}"
@@ -138,6 +141,7 @@ services:
       DJANGO_SETTINGS_MODULE: "plane.settings.production"
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@plane-db:5432/plane"
       REDIS_URL: "redis://plane-redis:6379/"
+      CELERY_BROKER_URL: "redis://plane-redis:6379/0"
       USE_MINIO: "1"
       AWS_ACCESS_KEY_ID: "${MINIO_ROOT_USER}"
       AWS_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD}"
@@ -167,6 +171,7 @@ services:
       DJANGO_SETTINGS_MODULE: "plane.settings.production"
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@plane-db:5432/plane"
       REDIS_URL: "redis://plane-redis:6379/"
+      CELERY_BROKER_URL: "redis://plane-redis:6379/0"
       WEB_URL: "http://project.devops.local"
     volumes:
       - plane-logs:/code/plane/logs
