@@ -144,7 +144,6 @@ services:
         cat > /etc/nginx/conf.d/00-aio-threads.conf <<'EOF'
         aio threads;
         directio off;
-        sendfile on;
         EOF
         exec /docker-entrypoint.sh nginx -g 'daemon off;'
     networks:
