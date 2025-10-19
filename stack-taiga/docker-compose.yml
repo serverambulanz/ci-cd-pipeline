@@ -137,6 +137,12 @@ services:
       TAIGA_URL: "${TAIGA_SCHEME}://${TAIGA_DOMAIN}"
       TAIGA_WEBSOCKETS_URL: "${WEBSOCKETS_SCHEME}://${TAIGA_DOMAIN}"
       TAIGA_SUBPATH: "${SUBPATH}"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Add 'aio off;' to nginx config for ARM64 compatibility
+        sed -i '/http {/a \    aio off;' /etc/nginx/nginx.conf 2>/dev/null || true
+        exec /docker-entrypoint.sh nginx -g 'daemon off;'
     networks:
       - taiga-internal
 
