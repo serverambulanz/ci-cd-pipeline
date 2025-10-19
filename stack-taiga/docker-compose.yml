@@ -196,7 +196,7 @@ services:
     container_name: taiga-gateway
     restart: unless-stopped
     volumes:
-      - ./taiga.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./stack-taiga/taiga.conf:/etc/nginx/conf.d/default.conf:ro
       - taiga-static-data:/taiga/static
       - taiga-media-data:/taiga/media
     networks:
