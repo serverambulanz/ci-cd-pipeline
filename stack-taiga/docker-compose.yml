@@ -192,7 +192,7 @@ services:
   # Taiga Gateway (Nginx Reverse Proxy)
   # ============================================
   taiga-gateway:
-    image: nginx:1.19-alpine
+    image: nginx:1.27-alpine
     container_name: taiga-gateway
     restart: unless-stopped
     environment:
