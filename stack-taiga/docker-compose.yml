@@ -140,8 +140,8 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        # Add 'aio off;' to nginx config for ARM64 compatibility
-        sed -i '/http {/a \    aio off;' /etc/nginx/nginx.conf 2>/dev/null || true
+        # Disable AIO for ARM64/Apple Silicon compatibility
+        echo 'aio off;' > /etc/nginx/conf.d/00-disable-aio.conf
         exec /docker-entrypoint.sh nginx -g 'daemon off;'
     networks:
       - taiga-internal
