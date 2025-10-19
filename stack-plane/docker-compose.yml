@@ -92,6 +92,9 @@ services:
       # Celery
       CELERY_BROKER_URL: "redis://plane-redis:6379/0"
 
+      # Gunicorn
+      GUNICORN_WORKERS: "2"
+
       # MinIO/S3
       USE_MINIO: "1"
       AWS_ACCESS_KEY_ID: "${MINIO_ROOT_USER}"
