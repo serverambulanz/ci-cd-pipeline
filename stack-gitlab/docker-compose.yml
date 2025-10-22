@@ -118,7 +118,7 @@ services:
   # PostgreSQL Database for GitLab
   # ============================================
   postgres:
-    image: postgres:14
+    image: postgres:16
     container_name: gitlab-postgres
     restart: unless-stopped
     volumes:
