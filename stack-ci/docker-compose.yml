@@ -63,7 +63,7 @@ services:
     container_name: woodpecker-server
     restart: unless-stopped
     depends_on:
-      gitea:
+      gitlab:
         condition: service_healthy
     ports:
       # gRPC Port für Agent Kommunikation (MUSS exponiert bleiben, interner Protokoll)
@@ -88,11 +88,11 @@ services:
       - WOODPECKER_ADMIN=admin
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
 
-      # Gitea Integration (via Traefik für OAuth-Kompatibilität)
-      - WOODPECKER_GITEA=true
-      - WOODPECKER_GITEA_URL=http://git.devops.local
-      - WOODPECKER_GITEA_CLIENT=${GITEA_OAUTH_CLIENT_ID}
-      - WOODPECKER_GITEA_SECRET=${GITEA_OAUTH_CLIENT_SECRET}
+      # GitLab Integration (via Traefik für OAuth-Kompatibilität)
+      - WOODPECKER_GITLAB=true
+      - WOODPECKER_GITLAB_URL=http://git.devops.local
+      - WOODPECKER_GITLAB_CLIENT=${GITLAB_OAUTH_CLIENT_ID}
+      - WOODPECKER_GITLAB_SECRET=${GITLAB_OAUTH_CLIENT_SECRET}
 
       - WOODPECKER_LOG_LEVEL=info
     networks:

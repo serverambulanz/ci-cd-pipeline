@@ -1,0 +1,178 @@
+# GitLab CE Stack - Local GitLab Server
+# Replace Gitea with GitLab CE for enhanced CI/CD integration
+# Deploy via Portainer oder: docker compose up -d
+
+services:
+  # ============================================
+  # GitLab CE - Self-hosted Git Service
+  # ============================================
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab
+    restart: unless-stopped
+    hostname: 'git.devops.local'
+    ports:
+      # SSH bleibt exponert (wie bisher bei Gitea)
+      - "2222:22"
+      # HTTP/HTTPS wird über Traefik gemanaged (wie bisher)
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    extra_hosts:
+      # Container-interne DNS-Auflösung aller DevOps Services über Host → Traefik
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+      - "dashboard.devops.local:host-gateway"
+      - "registry.devops.local:host-gateway"
+      - "logs.devops.local:host-gateway"
+      - "trivy.devops.local:host-gateway"
+    environment:
+      # GitLab Omnibus Configuration
+      GITLAB_OMNIBUS_CONFIG: |
+        # External URL (via Traefik)
+        external_url 'http://git.devops.local'
+
+        # SSH Configuration
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+
+        # Database (PostgreSQL)
+        gitlab_rails['db_adapter'] = 'postgresql'
+        gitlab_rails['db_encoding'] = 'unicode'
+        gitlab_rails['db_collation'] = 'utf8_general_ci'
+        gitlab_rails['db_host'] = 'postgres'
+        gitlab_rails['db_port'] = 5432
+        gitlab_rails['db_database'] = 'gitlabhq_production'
+        gitlab_rails['db_username'] = 'gitlab'
+        gitlab_rails['db_password'] = '${POSTGRES_PASSWORD}'
+        gitlab_rails['db_prepared_statements'] = true
+
+        # Redis
+        gitlab_rails['redis_host'] = 'redis'
+        gitlab_rails['redis_port'] = 6379
+
+        # Email (disabled for local)
+        gitlab_rails['gitlab_email_enabled'] = false
+
+        # Background jobs
+        gitlab_rails['gitlab_rails_background_jobs_sidekiq_enabled'] = true
+
+        # Container Registry (optional, kann Harbor nutzen)
+        registry['enable'] = false
+
+        # Pages (disabled)
+        pages_external_url "http://pages.devops.local"
+        gitlab_rails['pages_enabled'] = false
+
+        # Performance tuning
+        sidekiq['concurrency'] = 25
+        postgresql['shared_buffers'] = "256MB"
+        postgresql['max_connections'] = 200
+
+        # Security
+        gitlab_rails['gitlab_default_projects_features_issues'] = true
+        gitlab_rails['gitlab_default_projects_features_merge_requests'] = true
+        gitlab_rails['gitlab_default_projects_features_wiki'] = true
+        gitlab_rails['gitlab_default_projects_features_snippets'] = true
+        gitlab_rails['gitlab_default_projects_features_builds'] = true
+
+        # Initial root password (wird überschrieben durch GITLAB_ROOT_PASSWORD)
+        # gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
+    shm_size: '256m'
+    networks:
+      - devops-network
+      - gitlab-internal
+    labels:
+      # ==================
+      # Traefik Integration
+      # ==================
+      - "traefik.enable=true"
+
+      # HTTP Router
+      - "traefik.http.routers.gitlab.rule=Host(`git.devops.local`)"
+      - "traefik.http.routers.gitlab.entrypoints=web"
+      - "traefik.http.services.gitlab.loadbalancer.server.port=80"
+
+      # Docker Network für Traefik
+      - "traefik.docker.network=devops-network"
+
+      # Health Check
+      - "traefik.http.services.gitlab.loadbalancer.healthcheck.path=/-/health"
+      - "traefik.http.services.gitlab.loadbalancer.healthcheck.interval=30s"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "gitlab-rails", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 300s
+
+  # ============================================
+  # PostgreSQL Database for GitLab
+  # ============================================
+  postgres:
+    image: postgres:14
+    container_name: gitlab-postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=gitlab
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=gitlabhq_production
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    networks:
+      - gitlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitlab -d gitlabhq_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis for GitLab
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: gitlab-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - gitlab-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  gitlab_config:
+    driver: local
+
+  gitlab_logs:
+    driver: local
+
+  gitlab_data:
+    driver: local
+
+  postgres_data:
+    driver: local
+
+  redis_data:
+    driver: local
+
+networks:
+  devops-network:
+    external: true
+  gitlab-internal:
+    driver: bridge
+    internal: true
