@@ -91,8 +91,10 @@ services:
         # Email deaktiviert für lokale Entwicklung
         gitlab_rails['gitlab_email_enabled'] = false
 
-        # Performance tuning
-        sidekiq['concurrency'] = 25
+        # Sidekiq deaktiviert (externer Container)
+        sidekiq['enable'] = false
+
+        # GitLab Features
         gitlab_rails['gitlab_default_projects_features_issues'] = true
         gitlab_rails['gitlab_default_projects_features_merge_requests'] = true
         gitlab_rails['gitlab_default_projects_features_wiki'] = true
@@ -116,6 +118,7 @@ services:
       # HTTP Router
       - "traefik.http.routers.gitlab.rule=Host(`git.devops.local`)"
       - "traefik.http.routers.gitlab.entrypoints=web"
+      - "traefik.http.routers.gitlab.service=gitlab"
       - "traefik.http.services.gitlab.loadbalancer.server.port=80"
 
       # Docker Network für Traefik
@@ -180,6 +183,72 @@ services:
       exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
       '
 
+  # ============================================
+  # Sidekiq - Background Job Processor (separater Container)
+  # ============================================
+  sidekiq:
+    image: gitlab/gitlab-ce:18.5.1-ce.0
+    container_name: gitlab-sidekiq
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      gitlab:
+        condition: service_healthy
+    shm_size: "256m"
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    extra_hosts:
+      # Container-interne DNS-Auflösung
+      - "traefik.devops.local:host-gateway"
+      - "git.devops.local:host-gateway"
+      - "ci.devops.local:host-gateway"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        # Nur Sidekiq aktivieren
+        sidekiq['enable'] = true
+        sidekiq['concurrency'] = 25
+        sidekiq['listen_address'] = '0.0.0.0'
+
+        # Database Konfiguration (wie GitLab)
+        postgresql['enable'] = false
+        redis['enable'] = false
+        gitlab_rails['db_adapter'] = 'postgresql'
+        gitlab_rails['db_host'] = 'postgres'
+        gitlab_rails['db_port'] = 5432
+        gitlab_rails['db_database'] = 'gitlabhq_production'
+        gitlab_rails['db_username'] = 'gitlab'
+        gitlab_rails['db_password'] = '${POSTGRES_PASSWORD:-changeMe}'
+
+        # Redis Konfiguration
+        gitlab_rails['redis_host'] = 'redis'
+        gitlab_rails['redis_port'] = 6379
+
+        # Email deaktiviert
+        gitlab_rails['gitlab_email_enabled'] = false
+
+        # Logging
+        log_directory = '/var/log/gitlab/sidekiq'
+        log_rotation = { 'count' => 30, 'size' => '100M' }
+    networks:
+      - devops-network
+      - gitlab-internal
+    labels:
+      # Health Check für Sidekiq
+      - "traefik.enable=false"  # Kein externer Zugriff
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "sidekiq"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 volumes:
   pg_data:
     driver: local
@@ -192,6 +261,8 @@ volumes:
   gitlab_data:
     driver: local
   gitlab_runner:
+    driver: local
+  gitlab_sidekiq_logs:
     driver: local
 
 networks:
