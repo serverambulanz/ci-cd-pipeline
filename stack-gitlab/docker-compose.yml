@@ -133,7 +133,7 @@ services:
 
   # GitLab Runner mit gleicher Version wie GitLab CE
   gitlab-runner:
-    image: gitlab/gitlab-runner:alpine-v18.5.1
+    image: gitlab/gitlab-runner:alpine-v18.5.0
     container_name: gitlab-runner
     restart: unless-stopped
     depends_on:
