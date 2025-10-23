@@ -26,9 +26,13 @@ services:
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     # FIX 3: PostgreSQL mit custom config starten
     command: ["-c", "config_file=/etc/postgresql/postgresql.conf"]
-  # FIX 20: Disable PostgreSQL health check to break circular dependency
+  # FIX 21: Simple PostgreSQL Health Check (start immediately, check after delay)
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "sleep 5; pg_isready -U gitlab -d gitlabhq_production"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - gitlab-internal
 
