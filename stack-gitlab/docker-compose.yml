@@ -34,6 +34,47 @@ services:
     networks:
       - gitlab-internal
 
+  # =============================================
+  # pgBouncer - Connection Pooler für PostgreSQL Performance
+  # =============================================
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: gitlab-pgbouncer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # FIX 13: pgBouncer Performance Configuration (aus Performance Guide)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: '512m'
+        reservations:
+          cpus: '0.5'
+          memory: '256m'
+    environment:
+      DB_USER: gitlab
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-changeMe}
+      DB_HOST: postgres
+      DB_NAME: gitlabhq_production
+      # FIX 14: pgBouncer Connection Pool Settings (aus Performance Guide)
+      MAX_CLIENT_CONN: 500
+      DEFAULT_POOL_SIZE: 50
+      ADMIN_USERS: gitlab
+      ADMIN_PASSWORD: ${POSTGRES_PASSWORD:-changeMe}
+      POOL_MODE: transaction
+      SERVER_RESET_QUERY: DISCARD ALL
+    ports:
+      - "6432:6432"
+    networks:
+      - gitlab-internal
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "6432", "-U", "gitlab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7.4.2-alpine
     container_name: gitlab-redis
@@ -66,8 +107,9 @@ services:
     container_name: gitlab
     restart: unless-stopped
     hostname: gitlab.devops.local
+  # FIX 17: GitLab Dependencies auf pgBouncer (Performance Mode)
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -106,13 +148,11 @@ services:
         external_url '${GITLAB_EXTERNAL_URL:-http://git.devops.local}'
         gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2222}
 
-        # externe Services (PostgreSQL + Redis)
+        # FIX 15: PostgreSQL über pgBouncer Connection Pool (aus Performance Guide)
         postgresql['enable'] = false
         redis['enable'] = false
-        gitlab_rails['db_host'] = 'postgres'
-        gitlab_rails['db_port'] = 5432
-        gitlab_rails['db_database'] = 'gitlabhq_production'
-        gitlab_rails['db_username'] = 'gitlab'
+        gitlab_rails['db_host'] = 'pgbouncer'
+        gitlab_rails['db_port'] = 6432
         gitlab_rails['db_password'] = '${POSTGRES_PASSWORD:-changeMe}'
         gitlab_rails['redis_host'] = 'redis'
         gitlab_rails['redis_port'] = 6379
@@ -217,8 +257,9 @@ services:
     image: gitlab/gitlab-ce:18.5.1-ce.0
     container_name: gitlab-sidekiq
     restart: unless-stopped
+    # FIX 18: Sidekiq Dependencies auf pgBouncer (Performance Mode)
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -266,9 +307,9 @@ services:
         postgresql['enable'] = false
         redis['enable'] = false
 
-        # Database Konfiguration (wie GitLab)
-        gitlab_rails['db_host'] = 'postgres'
-        gitlab_rails['db_port'] = 5432
+        # FIX 16: Sidekiq ebenfalls über pgBouncer (wie GitLab)
+        gitlab_rails['db_host'] = 'pgbouncer'
+        gitlab_rails['db_port'] = 6432
         gitlab_rails['db_database'] = 'gitlabhq_production'
         gitlab_rails['db_username'] = 'gitlab'
         gitlab_rails['db_password'] = '${POSTGRES_PASSWORD}'
