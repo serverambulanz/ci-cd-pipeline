@@ -1,20 +1,54 @@
-# GitLab CE Stack - Local GitLab Server
-# Replace Gitea with GitLab CE for enhanced CI/CD integration
-# Deploy via Portainer oder: docker compose up -d
+version: "3.9"
 
 services:
-  # ============================================
-  # GitLab CE - Self-hosted Git Service
-  # ============================================
+  postgres:
+    image: postgres:16.8
+    container_name: gitlab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gitlab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeMe}
+      POSTGRES_DB: gitlabhq_production
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gitlab-internal
+
+  redis:
+    image: redis:7.4.2-alpine
+    container_name: gitlab-redis
+    restart: unless-stopped
+    command: ["redis-server","--appendonly","yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gitlab-internal
+
   gitlab:
-    image: gitlab/gitlab-ce:latest
+    image: gitlab/gitlab-ce:18.5.1-ce.0
     container_name: gitlab
     restart: unless-stopped
-    hostname: 'git.devops.local'
+    hostname: gitlab.devops.local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
-      # SSH bleibt exponert (wie bisher bei Gitea)
+      # SSH Port (direkt, nicht über Traefik)
       - "2222:22"
-      # HTTP/HTTPS wird über Traefik gemanaged (wie bisher)
+    shm_size: "256m"
     volumes:
       - gitlab_config:/etc/gitlab
       - gitlab_logs:/var/log/gitlab
@@ -31,57 +65,45 @@ services:
       - "logs.devops.local:host-gateway"
       - "trivy.devops.local:host-gateway"
     environment:
-      # GitLab Omnibus Configuration
       GITLAB_OMNIBUS_CONFIG: |
-        # External URL (via Traefik)
-        external_url 'http://git.devops.local'
+        # External URL über Traefik
+        external_url '${GITLAB_EXTERNAL_URL:-http://git.devops.local}'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2222}
 
-        # SSH Configuration
-        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        # Interne PostgreSQL und Redis deaktivieren
+        postgresql['enable'] = false
+        redis['enable'] = false
 
-        # Database (PostgreSQL)
+        # PostgreSQL extern (16.8)
         gitlab_rails['db_adapter'] = 'postgresql'
-        gitlab_rails['db_encoding'] = 'unicode'
-        gitlab_rails['db_collation'] = 'utf8_general_ci'
+        gitlab_rails['db_encoding'] = 'utf8'
         gitlab_rails['db_host'] = 'postgres'
         gitlab_rails['db_port'] = 5432
         gitlab_rails['db_database'] = 'gitlabhq_production'
         gitlab_rails['db_username'] = 'gitlab'
-        gitlab_rails['db_password'] = '${POSTGRES_PASSWORD}'
+        gitlab_rails['db_password'] = '${POSTGRES_PASSWORD:-changeMe}'
         gitlab_rails['db_prepared_statements'] = true
 
-        # Redis
+        # Redis extern (7.4.2)
         gitlab_rails['redis_host'] = 'redis'
         gitlab_rails['redis_port'] = 6379
 
-        # Email (disabled for local)
+        # Email deaktiviert für lokale Entwicklung
         gitlab_rails['gitlab_email_enabled'] = false
-
-        # Background jobs
-        gitlab_rails['gitlab_rails_background_jobs_sidekiq_enabled'] = true
-
-        # Container Registry (optional, kann Harbor nutzen)
-        registry['enable'] = false
-
-        # Pages (disabled)
-        pages_external_url "http://pages.devops.local"
-        gitlab_rails['pages_enabled'] = false
 
         # Performance tuning
         sidekiq['concurrency'] = 25
-        postgresql['shared_buffers'] = "256MB"
-        postgresql['max_connections'] = 200
-
-        # Security
         gitlab_rails['gitlab_default_projects_features_issues'] = true
         gitlab_rails['gitlab_default_projects_features_merge_requests'] = true
         gitlab_rails['gitlab_default_projects_features_wiki'] = true
         gitlab_rails['gitlab_default_projects_features_snippets'] = true
         gitlab_rails['gitlab_default_projects_features_builds'] = true
 
-        # Initial root password (wird überschrieben durch GITLAB_ROOT_PASSWORD)
-        # gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
-    shm_size: '256m'
+        # Container Registry deaktiviert (wir nutzen Harbor)
+        registry['enable'] = false
+
+        # Pages deaktiviert
+        gitlab_rails['pages_enabled'] = false
     networks:
       - devops-network
       - gitlab-internal
@@ -102,11 +124,6 @@ services:
       # Health Check
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.path=/-/health"
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.interval=30s"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "gitlab-rails", "status"]
       interval: 30s
@@ -114,60 +131,67 @@ services:
       retries: 6
       start_period: 300s
 
-  # ============================================
-  # PostgreSQL Database for GitLab
-  # ============================================
-  postgres:
-    image: postgres:16
-    container_name: gitlab-postgres
+  # GitLab Runner mit gleicher Version wie GitLab CE
+  gitlab-runner:
+    image: gitlab/gitlab-runner:alpine-v18.5.1
+    container_name: gitlab-runner
     restart: unless-stopped
+    depends_on:
+      - gitlab
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - gitlab_runner:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - POSTGRES_USER=gitlab
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=gitlabhq_production
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      CI_SERVER_URL: "${GITLAB_EXTERNAL_URL:-http://git.devops.local}"
+      REGISTRATION_TOKEN: "${GITLAB_RUNNER_REG_TOKEN:-REPLACE_ME}"
+      RUNNER_EXECUTOR: "docker"
+      RUNNER_DOCKER_IMAGE: "alpine:latest"
+      RUNNER_TAGS: "docker,local"
+      RUNNER_NAME: "local-docker-runner"
+      RUNNER_RUN_UNTAGGED: "true"
+      RUNNER_LOCKED: "false"
+    extra_hosts:
+      # DNS-Auflösung für GitLab
+      - "git.devops.local:host-gateway"
     networks:
-      - gitlab-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gitlab -d gitlabhq_production"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ============================================
-  # Redis for GitLab
-  # ============================================
-  redis:
-    image: redis:7-alpine
-    container_name: gitlab-redis
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    networks:
-      - gitlab-internal
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
+      - devops-network
+    entrypoint: ["/bin/sh","-lc"]
+    command: >
+      '
+      if [ ! -f /etc/gitlab-runner/config.toml ] && [ -n "$REGISTRATION_TOKEN" ] && [ "$REGISTRATION_TOKEN" != "REPLACE_ME" ]; then
+        echo "Registering GitLab Runner..."
+        gitlab-runner register --non-interactive
+          --url "$CI_SERVER_URL"
+          --registration-token "$REGISTRATION_TOKEN"
+          --executor "$RUNNER_EXECUTOR"
+          --docker-image "$RUNNER_DOCKER_IMAGE"
+          --docker-volumes "/var/run/docker.sock:/var/run/docker.sock"
+          --name "$RUNNER_NAME"
+          --tag-list "$RUNNER_TAGS"
+          --run-untagged="$RUNNER_RUN_UNTAGGED"
+          --locked="$RUNNER_LOCKED"
+          --access-level "not_protected";
+      elif [ -f /etc/gitlab-runner/config.toml ]; then
+        echo "GitLab Runner already configured."
+      else
+        echo "Waiting for REGISTRATION_TOKEN in environment variables..."
+        sleep 10
+      fi
+      exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
+      '
 
 volumes:
+  pg_data:
+    driver: local
+  redis_data:
+    driver: local
   gitlab_config:
     driver: local
-
   gitlab_logs:
     driver: local
-
   gitlab_data:
     driver: local
-
-  postgres_data:
-    driver: local
-
-  redis_data:
+  gitlab_runner:
     driver: local
 
 networks:
