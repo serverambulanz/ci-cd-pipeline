@@ -124,11 +124,15 @@ services:
       - "traefik.http.routers.gitlab.service=gitlab"
       - "traefik.http.services.gitlab.loadbalancer.server.port=80"
 
+      # Middleware für GitLab Redirects und Headers
+      - "traefik.http.middlewares.gitlab-headers.headers.customRequestHeaders.X-Forwarded-Proto=http"
+      - "traefik.http.routers.gitlab.middlewares=gitlab-headers"
+
       # Docker Network für Traefik
       - "traefik.docker.network=devops-network"
 
       # Health Check (Path der von außen funktioniert)
-      - "traefik.http.services.gitlab.loadbalancer.healthcheck.path=/-/readiness"
+      - "traefik.http.services.gitlab.loadbalancer.healthcheck.path=/users/sign_in"
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.timeout=10s"
     healthcheck:
