@@ -26,11 +26,9 @@ services:
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     # FIX 3: PostgreSQL mit custom config starten
     command: ["-c", "config_file=/etc/postgresql/postgresql.conf"]
+  # FIX 20: Disable PostgreSQL health check to break circular dependency
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gitlab -d gitlabhq_production"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      disable: true
     networks:
       - gitlab-internal
 
@@ -69,11 +67,9 @@ services:
       - "6432:6432"
     networks:
       - gitlab-internal
+    # FIX 19: Disable pgBouncer health check to break circular dependency
     healthcheck:
-      test: ["CMD", "pg_isready", "-p", "6432", "-U", "gitlab"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      disable: true
 
   redis:
     image: redis:7.4.2-alpine
