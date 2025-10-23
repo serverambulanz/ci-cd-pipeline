@@ -142,7 +142,7 @@ services:
 
   # GitLab Runner mit gleicher Version wie GitLab CE
   gitlab-runner:
-    image: gitlab/gitlab-runner:alpine-v18.5.0
+    image: gitlab/gitlab-runner:v18.5.0
     container_name: gitlab-runner
     restart: unless-stopped
     depends_on:
@@ -167,7 +167,7 @@ services:
       - "git.devops.local:host-gateway"
     networks:
       - devops-network
-    command: ["sh", "-c", "if [ ! -f /etc/gitlab-runner/config.toml ] && [ -n \"$${REGISTRATION_TOKEN}\" ]; then echo \"Registering GitLab Runner...\"; gitlab-runner register --non-interactive --url \"$${CI_SERVER_URL}\" --registration-token \"$${REGISTRATION_TOKEN}\" --executor \"$${RUNNER_EXECUTOR}\" --docker-image \"$${RUNNER_DOCKER_IMAGE}\" --docker-volumes \"/var/run/docker.sock:/var/run/docker.sock\" --name \"$${RUNNER_NAME}\" --tag-list \"$${RUNNER_TAGS}\" --run-untagged=\"$${RUNNER_RUN_UNTAGGED}\" --locked=\"$${RUNNER_LOCKED}\" --access-level \"not_protected\"; elif [ -f /etc/gitlab-runner/config.toml ]; then echo \"GitLab Runner already configured.\"; else echo \"Waiting for REGISTRATION_TOKEN in environment variables...\"; sleep 30; fi; exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner"]
+    command: ["/bin/sh", "-c", "if [ ! -f /etc/gitlab-runner/config.toml ] && [ -n \"${REGISTRATION_TOKEN}\" ]; then echo \"Registering GitLab Runner...\"; gitlab-runner register --non-interactive --url \"${CI_SERVER_URL}\" --registration-token \"${REGISTRATION_TOKEN}\" --executor \"${RUNNER_EXECUTOR}\" --docker-image \"${RUNNER_DOCKER_IMAGE}\" --docker-volumes \"/var/run/docker.sock:/var/run/docker.sock\" --name \"${RUNNER_NAME}\" --tag-list \"${RUNNER_TAGS}\" --run-untagged=\"${RUNNER_RUN_UNTAGGED}\" --locked=\"${RUNNER_LOCKED}\" --access-level \"not_protected\"; elif [ -f /etc/gitlab-runner/config.toml ]; then echo \"GitLab Runner already configured.\"; else echo \"Waiting for REGISTRATION_TOKEN in environment variables...\"; sleep 30; fi; exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner"]
 
   # ============================================
   # Sidekiq - Background Job Processor (separater Container)
