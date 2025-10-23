@@ -124,15 +124,17 @@ services:
       # Docker Network für Traefik
       - "traefik.docker.network=devops-network"
 
-      # Health Check
-      - "traefik.http.services.gitlab.loadbalancer.healthcheck.path=/-/health"
+      # Health Check (Path der von außen funktioniert)
+      - "traefik.http.services.gitlab.loadbalancer.healthcheck.path=/-/readiness"
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.interval=30s"
+      - "traefik.http.services.gitlab.loadbalancer.healthcheck.timeout=10s"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/-/health"]
+      # Interner Health Check über Workhorse Socket
+      test: ["CMD", "curl", "-f", "--unix-socket", "/var/opt/gitlab/gitlab-workhorse/sockets/socket", "http://localhost/-/health"]
       interval: 30s
       timeout: 10s
-      retries: 6
-      start_period: 300s
+      retries: 3
+      start_period: 120s
 
   # GitLab Runner mit gleicher Version wie GitLab CE
   gitlab-runner:
