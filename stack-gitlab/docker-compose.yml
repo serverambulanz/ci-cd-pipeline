@@ -10,7 +10,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: gitlabhq_production
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-      # Performance settings for production
       POSTGRES_SHARED_PRELOAD_LIBRARIES: pg_stat_statements
       POSTGRES_MAX_CONNECTIONS: 200
     volumes:
@@ -27,14 +26,7 @@ services:
     image: redis:7.4.2-alpine
     container_name: gitlab-redis
     restart: unless-stopped
-    command: |
-      redis-server
-      --appendonly yes
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --save 900 1
-      --save 300 10
-      --save 60 10000
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru", "--save", "900", "1", "--save", "300", "10", "--save", "60", "10000"]
     volumes:
       - redis_data:/data
     sysctls:
@@ -175,28 +167,7 @@ services:
       - "git.devops.local:host-gateway"
     networks:
       - devops-network
-    entrypoint: ["/bin/sh","-lc"]
-    command: |
-      if [ ! -f /etc/gitlab-runner/config.toml ] && [ -n "$REGISTRATION_TOKEN" ]; then
-        echo "Registering GitLab Runner..."
-        gitlab-runner register --non-interactive \
-          --url "$CI_SERVER_URL" \
-          --registration-token "$REGISTRATION_TOKEN" \
-          --executor "$RUNNER_EXECUTOR" \
-          --docker-image "$RUNNER_DOCKER_IMAGE" \
-          --docker-volumes "/var/run/docker.sock:/var/run/docker.sock" \
-          --name "$RUNNER_NAME" \
-          --tag-list "$RUNNER_TAGS" \
-          --run-untagged="$RUNNER_RUN_UNTAGGED" \
-          --locked="$RUNNER_LOCKED" \
-          --access-level "not_protected";
-      elif [ -f /etc/gitlab-runner/config.toml ]; then
-        echo "GitLab Runner already configured."
-      else
-        echo "Waiting for REGISTRATION_TOKEN in environment variables..."
-        sleep 30
-      fi
-      exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
+    command: ["sh", "-c", "if [ ! -f /etc/gitlab-runner/config.toml ] && [ -n \"$${REGISTRATION_TOKEN}\" ]; then echo \"Registering GitLab Runner...\"; gitlab-runner register --non-interactive --url \"$${CI_SERVER_URL}\" --registration-token \"$${REGISTRATION_TOKEN}\" --executor \"$${RUNNER_EXECUTOR}\" --docker-image \"$${RUNNER_DOCKER_IMAGE}\" --docker-volumes \"/var/run/docker.sock:/var/run/docker.sock\" --name \"$${RUNNER_NAME}\" --tag-list \"$${RUNNER_TAGS}\" --run-untagged=\"$${RUNNER_RUN_UNTAGGED}\" --locked=\"$${RUNNER_LOCKED}\" --access-level \"not_protected\"; elif [ -f /etc/gitlab-runner/config.toml ]; then echo \"GitLab Runner already configured.\"; else echo \"Waiting for REGISTRATION_TOKEN in environment variables...\"; sleep 30; fi; exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner"]
 
   # ============================================
   # Sidekiq - Background Job Processor (separater Container)
