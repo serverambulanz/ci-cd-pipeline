@@ -127,12 +127,7 @@ services:
         gitlab_rails['gitlab_rails']['assets_enabled'] = true
         gitlab_rails['gitlab_rails']['precompile_assets'] = true
 
-        # Workhorse Performance
-        gitlab_workhorse['listen_network'] = "tcp"
-        gitlab_workhorse['listen_addr'] = "0.0.0.0:8080"
-        gitlab_workhorse['auth_backend'] = "http://localhost:8080"
-
-        # Nginx Performance
+        # Nginx Performance (Standard GitLab Setup)
         nginx['enable'] = true
         nginx['worker_processes'] = 4
         nginx['worker_connections'] = 1024
@@ -149,7 +144,7 @@ services:
       - "traefik.http.routers.gitlab.rule=Host(`git.devops.local`)"
       - "traefik.http.routers.gitlab.entrypoints=web"
       - "traefik.http.routers.gitlab.service=gitlab"
-      - "traefik.http.services.gitlab.loadbalancer.server.port=8080"
+      - "traefik.http.services.gitlab.loadbalancer.server.port=80"
 
       # Middleware für GitLab Redirects und Headers
       - "traefik.http.middlewares.gitlab-headers.headers.customRequestHeaders.X-Forwarded-Proto=http"
@@ -163,8 +158,8 @@ services:
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.gitlab.loadbalancer.healthcheck.timeout=10s"
     healthcheck:
-      # Interner Health Check über Workhorse TCP Port
-      test: ["CMD", "curl", "-f", "http://localhost:8080/-/health"]
+      # Interner Health Check über Nginx
+      test: ["CMD", "curl", "-f", "http://localhost/-/readiness"]
       interval: 30s
       timeout: 10s
       retries: 3
