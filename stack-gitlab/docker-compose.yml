@@ -11,8 +11,21 @@ services:
       POSTGRES_DB: gitlabhq_production
       # Minimale Environment Variablen für maximale Kompatibilität
       POSTGRES_MAX_CONNECTIONS: 200
+    # FIX 1: PostgreSQL Performance Limits (aus Performance Guide)
+    deploy:
+      resources:
+        limits:
+          cpus: '${POSTGRES_CPU_LIMIT:-2}'
+          memory: '${POSTGRES_MEMORY_LIMIT:-4096m}'
+        reservations:
+          cpus: '1'
+          memory: '2048m'
+    # FIX 2: PostgreSQL Configuration File mit Performance Tuning
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    # FIX 3: PostgreSQL mit custom config starten
+    command: ["-c", "config_file=/etc/postgresql/postgresql.conf"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gitlab -d gitlabhq_production"]
       interval: 10s
@@ -25,7 +38,17 @@ services:
     image: redis:7.4.2-alpine
     container_name: gitlab-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru", "--save", "900", "1", "--save", "300", "10", "--save", "60", "10000"]
+    # FIX 4: Redis Performance (2GB Cache mit volatile-lru statt 512MB allkeys-lru)
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "2gb", "--maxmemory-policy", "volatile-lru", "--save", "900", "1", "--save", "300", "10", "--save", "60", "10000"]
+  # FIX 5: Redis Performance Limits (aus Performance Guide)
+    deploy:
+      resources:
+        limits:
+          cpus: '${REDIS_CPU_LIMIT:-1}'
+          memory: '${REDIS_MEMORY_LIMIT:-2048m}'
+        reservations:
+          cpus: '0.5'
+          memory: '512m'
     volumes:
       - redis_data:/data
     sysctls:
@@ -52,15 +75,15 @@ services:
       # SSH Port (direkt, nicht über Traefik)
       - "2222:22"
     shm_size: "1024m"  # Erhöht für Assets Compilation
-    # Performance Resource Limits
+    # FIX 9: GitLab Performance Limits (4vCPU/8GB RAM aus Performance Guide)
     deploy:
       resources:
         limits:
-          cpus: '${GITLAB_CPU_LIMIT:-2}'
-          memory: '${GITLAB_MEMORY_LIMIT:-4096m}'
+          cpus: '${GITLAB_CPU_LIMIT:-4}'
+          memory: '${GITLAB_MEMORY_LIMIT:-8192m}'
         reservations:
-          cpus: '1'
-          memory: '2048m'
+          cpus: '2'
+          memory: '4096m'
     volumes:
       - gitlab_config:/etc/gitlab
       - gitlab_logs:/var/log/gitlab
@@ -76,34 +99,40 @@ services:
       - "registry.devops.local:host-gateway"
       - "logs.devops.local:host-gateway"
       - "trivy.devops.local:host-gateway"
+  # FIX 6: Komplette GitLab Omnibus Konfiguration (basierend auf Performance Guide)
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         # External URL über Traefik
         external_url '${GITLAB_EXTERNAL_URL:-http://git.devops.local}'
         gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2222}
 
-        # Interne PostgreSQL und Redis deaktivieren
+        # externe Services (PostgreSQL + Redis)
         postgresql['enable'] = false
         redis['enable'] = false
-
-        # PostgreSQL extern (16.8)
-        gitlab_rails['db_adapter'] = 'postgresql'
-        gitlab_rails['db_encoding'] = 'utf8'
         gitlab_rails['db_host'] = 'postgres'
         gitlab_rails['db_port'] = 5432
         gitlab_rails['db_database'] = 'gitlabhq_production'
         gitlab_rails['db_username'] = 'gitlab'
         gitlab_rails['db_password'] = '${POSTGRES_PASSWORD:-changeMe}'
-        gitlab_rails['db_prepared_statements'] = true
-
-        # Redis extern (7.4.2)
         gitlab_rails['redis_host'] = 'redis'
         gitlab_rails['redis_port'] = 6379
 
         # Email deaktiviert für lokale Entwicklung
         gitlab_rails['gitlab_email_enabled'] = false
 
-        # Sidekiq deaktiviert (externer Container)
+        # FIX 7: Puma Webserver Performance (aus Performance Guide)
+        puma['worker_processes'] = 4
+        puma['threads_min'] = 4
+        puma['threads_max'] = 8
+
+        # FIX 8: Workhorse & NGINX Tuning (aus Performance Guide)
+        gitlab_workhorse['enable'] = true
+        gitlab_workhorse['proxy_headers_timeout'] = "240s"
+        nginx['gzip'] = "on"
+        nginx['gzip_comp_level'] = "5"
+        nginx['gzip_types'] = "text/plain text/css application/json application/javascript application/x-javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml"
+
+        # Sidekiq deaktivieren (externer Container)
         sidekiq['enable'] = false
 
         # GitLab Features
@@ -118,19 +147,6 @@ services:
 
         # Pages deaktiviert
         gitlab_rails['pages_enabled'] = false
-
-        # Performance Optimierungen für Frontend
-        gitlab_rails['gitlab_max_sessions_duration'] = 7200
-        gitlab_rails['gitlab_session_expire_delay'] = 7200
-
-        # Assets und Static Files Optimierung
-        gitlab_rails['gitlab_rails']['assets_enabled'] = true
-        gitlab_rails['gitlab_rails']['precompile_assets'] = true
-
-        # Nginx Performance (Standard GitLab Setup)
-        nginx['enable'] = true
-        nginx['worker_processes'] = 4
-        nginx['worker_connections'] = 1024
     networks:
       - devops-network
       - gitlab-internal
@@ -195,7 +211,7 @@ services:
     command: ["/bin/bash", "-c", "if [ ! -f /etc/gitlab-runner/config.toml ] && [ -n \"${REGISTRATION_TOKEN}\" ]; then echo \"Registering GitLab Runner...\"; gitlab-runner register --non-interactive --url \"${CI_SERVER_URL}\" --registration-token \"${REGISTRATION_TOKEN}\" --executor \"${RUNNER_EXECUTOR}\" --docker-image \"${RUNNER_DOCKER_IMAGE}\" --docker-volumes \"/var/run/docker.sock:/var/run/docker.sock\" --name \"${RUNNER_NAME}\" --tag-list \"${RUNNER_TAGS}\" --run-untagged=\"${RUNNER_RUN_UNTAGGED}\" --locked=\"${RUNNER_LOCKED}\" --access-level \"not_protected\"; elif [ -f /etc/gitlab-runner/config.toml ]; then echo \"GitLab Runner already configured.\"; else echo \"Waiting for REGISTRATION_TOKEN in environment variables...\"; sleep 30; fi; exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner"]
 
   # ============================================
-  # Sidekiq - Background Job Processor (separater Container)
+  # Sidekiq - Background Job Processor (ausgelagert, optimiert)
   # ============================================
   sidekiq:
     image: gitlab/gitlab-ce:18.5.1-ce.0
@@ -206,8 +222,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      gitlab:
-        condition: service_healthy
+    # FIX 11: Sidekiq Resource Limits (aus Performance Guide)
+    deploy:
+      resources:
+        limits:
+          cpus: '${SIDEKIQ_CPU_LIMIT:-2}'
+          memory: '${SIDEKIQ_MEMORY_LIMIT:-4096m}'
+        reservations:
+          cpus: '1'
+          memory: '2048m'
     shm_size: "256m"
     volumes:
       - gitlab_config:/etc/gitlab
@@ -220,32 +243,44 @@ services:
       - "traefik.devops.local:host-gateway"
       - "git.devops.local:host-gateway"
       - "ci.devops.local:host-gateway"
+  # FIX 12: Sidekiq Optimized Configuration (aus Performance Guide)
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         # Nur Sidekiq aktivieren
         sidekiq['enable'] = true
-        sidekiq['concurrency'] = 25
-        sidekiq['listen_address'] = '0.0.0.0'
+        sidekiq['concurrency'] = 20
+        sidekiq['max_retries'] = 3
+        sidekiq['queue_groups'] = {
+          'mailers' => {
+            'namespace' => 'mailers',
+            'weight' => 2
+          }
+        }
 
-        # Database Konfiguration (wie GitLab)
+        # Alle unnötigen Services deaktivieren
+        puma['enable'] = false
+        gitlab_workhorse['enable'] = false
+        nginx['enable'] = false
+        gitaly['enable'] = false
+        mailroom['enable'] = false
         postgresql['enable'] = false
         redis['enable'] = false
-        gitlab_rails['db_adapter'] = 'postgresql'
-        gitlab_rails['db_encoding'] = 'utf8'
+
+        # Database Konfiguration (wie GitLab)
         gitlab_rails['db_host'] = 'postgres'
         gitlab_rails['db_port'] = 5432
         gitlab_rails['db_database'] = 'gitlabhq_production'
         gitlab_rails['db_username'] = 'gitlab'
         gitlab_rails['db_password'] = '${POSTGRES_PASSWORD}'
-        gitlab_rails['db_prepared_statements'] = true
-
-        # Redis Konfiguration
         gitlab_rails['redis_host'] = 'redis'
         gitlab_rails['redis_port'] = 6379
 
-        # Sidekiq Performance
-        sidekiq['concurrency'] = 25
-        sidekiq['max_retries'] = 3
+        # Email deaktiviert
+        gitlab_rails['gitlab_email_enabled'] = false
+
+        # Logging
+        log_directory = '/var/log/gitlab/sidekiq'
+        log_rotation = { 'count' => 30, 'size' => '100M' }
         sidekiq['queue_groups'] = {
           'mailers' => {
             'namespace' => 'mailers',
