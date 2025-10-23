@@ -51,7 +51,16 @@ services:
     ports:
       # SSH Port (direkt, nicht über Traefik)
       - "2222:22"
-    shm_size: "256m"
+    shm_size: "1024m"  # Erhöht für Assets Compilation
+    # Performance Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${GITLAB_CPU_LIMIT:-2}'
+          memory: '${GITLAB_MEMORY_LIMIT:-4096m}'
+        reservations:
+          cpus: '1'
+          memory: '2048m'
     volumes:
       - gitlab_config:/etc/gitlab
       - gitlab_logs:/var/log/gitlab
@@ -109,6 +118,24 @@ services:
 
         # Pages deaktiviert
         gitlab_rails['pages_enabled'] = false
+
+        # Performance Optimierungen für Frontend
+        gitlab_rails['gitlab_max_sessions_duration'] = 7200
+        gitlab_rails['gitlab_session_expire_delay'] = 7200
+
+        # Assets und Static Files Optimierung
+        gitlab_rails['gitlab_rails']['assets_enabled'] = true
+        gitlab_rails['gitlab_rails']['precompile_assets'] = true
+
+        # Workhorse Performance
+        gitlab_workhorse['listen_network'] = "tcp"
+        gitlab_workhorse['listen_addr'] = "0.0.0.0:8080"
+        gitlab_workhorse['auth_backend'] = "http://localhost:8080"
+
+        # Nginx Performance
+        nginx['enable'] = true
+        nginx['worker_processes'] = 4
+        nginx['worker_connections'] = 1024
     networks:
       - devops-network
       - gitlab-internal
@@ -122,7 +149,7 @@ services:
       - "traefik.http.routers.gitlab.rule=Host(`git.devops.local`)"
       - "traefik.http.routers.gitlab.entrypoints=web"
       - "traefik.http.routers.gitlab.service=gitlab"
-      - "traefik.http.services.gitlab.loadbalancer.server.port=80"
+      - "traefik.http.services.gitlab.loadbalancer.server.port=8080"
 
       # Middleware für GitLab Redirects und Headers
       - "traefik.http.middlewares.gitlab-headers.headers.customRequestHeaders.X-Forwarded-Proto=http"
